@@ -20,9 +20,7 @@ const moesifMiddleware = moesif({
 app.use(moesifMiddleware);
 
 app.post('/register', jsonParser,
-  async (req, res) => {
-    console.log(req.body);
-
+ async (req, res) => {
     // create Stripe customer
     const customer = await stripe.customers.create({
       email: req.body.email,
@@ -38,14 +36,13 @@ app.post('/register', jsonParser,
       ],
     });
 
-    // create user and company in Moesif
-    var company = { companyId: subscription.id };
+    // create user, company, and subscription in Moesif
+    var company = { companyId: customer.id };
     moesifMiddleware.updateCompany(company);
-    console.log("Moesif create company");
 
-    var user = { 
+    var user = {
       userId: customer.id,
-      companyId: subscription.id,
+      companyId: customer.id,
       metadata: {
         email: req.body.email,
         firstName: req.body.firstname,
@@ -53,7 +50,17 @@ app.post('/register', jsonParser,
       }
     };
     moesifMiddleware.updateUser(user);
-    console.log("Moesif create user");
+
+    var subscription = {
+      subscriptionId: subscription.id,
+      companyId: customer.id,
+      status: "active",
+    }
+    moesifMiddleware.updateSubscription(subscription).then((result) => { 
+      console.log("subscription updated successfully");
+    }).catch((err) => {
+      console.error("Error updating subscription", err);
+    } );
 
     // send back a new API key for use
     var body = {
@@ -85,24 +92,20 @@ app.post('/register', jsonParser,
         "Authorization": process.env.TYK_AUTH_KEY
       }
     });
-    console.log(response);
     var data = await response.json();
-    console.log("Tyk create API key");
-    console.log(data);
     var tykAPIKey = data.key_id;
 
-    var user = { 
+    var user = {
       userId: customer.id,
       metadata: {
         apikey: tykAPIKey,
       }
     };
     moesifMiddleware.updateUser(user);
-    console.log("Moesif update user");
 
     res.status(200)
     res.send({ apikey: tykAPIKey });
-  }
+ }
 )
 
 app.get("/", function (_req, res) {
